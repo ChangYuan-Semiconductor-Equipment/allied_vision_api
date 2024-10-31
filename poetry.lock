@@ -162,13 +162,13 @@ reference = "tsinghua"
 
 [[package]]
 name = "socket-cyg"
-version = "0.1.0"
+version = "0.1.1"
 description = "CYG socket 封装"
 optional = false
 python-versions = ">=3.8,<=3.13"
 files = [
-    {file = "socket_cyg-0.1.0-py3-none-any.whl", hash = "sha256:79eb71248ce5309837b1643ede6d1d387d912080076f809ec70c0d185adffcc8"},
-    {file = "socket_cyg-0.1.0.tar.gz", hash = "sha256:d22d68c1e8f9aa8ddd348f65d57e5b57def6f10f56c82df2c9b5ac1e90cb8ace"},
+    {file = "socket_cyg-0.1.1-py3-none-any.whl", hash = "sha256:8e97d25e628bf3c590e2d69bd05b73aa5fa0ec14c5c66cca010be4b222c8929e"},
+    {file = "socket_cyg-0.1.1.tar.gz", hash = "sha256:c6a7595944ad0dba4abce58179da36efbf2d24aed619f08698aced6c025b2b6d"},
 ]
 
 [package.source]
