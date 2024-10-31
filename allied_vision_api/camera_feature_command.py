@@ -1,6 +1,10 @@
+"""枚举相机可操作的参数."""
 from enum import Enum
 
+
+# pylint: disable=C0103
 class CameraFeatureCommand(Enum):
+    """枚举相机可操作的参数 class"""
 
     # 曝光
     ExposureActiveMode = "ExposureActiveMode"

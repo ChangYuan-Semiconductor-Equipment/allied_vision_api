@@ -42,9 +42,9 @@ class Controller:
         """
         data_dict = json.loads(data.decode(encoding="utf-8"))
         for command, info in data_dict.items():
-            self._logger.info(f"{'-' * 20} 收到客户端指令: {command} {'-' * 20}")
-            self._logger.info(f"***指令包含的数据*** -> {info}")
+            self._logger.info("%s 收到客户端指令: %s %s", "-" * 20, command, "-" * 20)
+            self._logger.info("***指令包含的数据*** -> %s", info)
             if hasattr(self.camera_common, command):
                 getattr(self.camera_common, command)(**info)
-                self._logger.info(f"{'-' * 20} 指令执行结束 {'-' * 20}")
+                self._logger.info("%s 指令执行结束 %s", "-" * 20, "-" * 20)
         return "@_@"

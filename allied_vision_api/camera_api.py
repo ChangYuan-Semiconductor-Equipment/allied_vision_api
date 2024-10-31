@@ -15,7 +15,7 @@ from pymba.camera import Camera, SINGLE_FRAME, CONTINUOUS
 from allied_vision_api.camera_feature_command import CameraFeatureCommand
 
 
-# pylint: disable=C0301, disable=R0917, disable=R0913
+# pylint: disable=C0301, disable=R0917, disable=R0913, disable=R0904
 class CameraApi:
     """Allied vision api."""
 
@@ -320,7 +320,7 @@ class CameraApi:
                 file_path = os.path.join(save_dir, f"{project_name}.{camera_id}.{exposure_time}.{_frame_id}.png")
             else:
                 file_path = f"{project_name}.{camera_id}.{exposure_time}.{_frame_id}.png"
-            cv2.imwrite(file_path, _image)
+            cv2.imwrite(file_path, _image)  # pylint: disable=E1101
         threading.Thread(target=_save_photo_local, daemon=False).start()
 
     def generate_save_photo_func(self, camera_id, project_name: str, interval: int, save_dir=None) -> Callable:
@@ -352,22 +352,9 @@ class CameraApi:
                     file_path = os.path.join(save_dir, f"{project_name}.{camera_id}.{exposure_time}.{_frame_id}.png")
                 else:
                     file_path = f"{project_name}.{camera_id}.{exposure_time}.{_frame_id}.png"
-                cv2.imwrite(file_path, _image)
+                cv2.imwrite(file_path, _image)  # pylint: disable=E1101
 
-            cv2.waitKey(interval)
+            cv2.waitKey(interval)  # pylint: disable=E1101
             threading.Thread(target=_save_photo, daemon=False).start()
 
         return _save_photo_handler
-
-
-if __name__ == '__main__':
-    camera_common = CameraApi()
-    # camera_common.open_camera('DEV_1AB22C02A23D')
-    #
-    # camera_common.set_feature_value("DEV_1AB22C02A23D", feature_name=CameraFeatureCommand.ExposureTime.value, value=125000)
-    # camera_common.set_feature_value(camera_id='DEV_1AB22C02A23D', feature_name=CameraFeatureCommand.Gain.value, value=40)
-    #
-    # camera_common.acquire_one("DEV_1AB22C02A23D", project_name='seethru')
-    # camera_common.acquire_one("DEV_1AB22C02A23D", project_name='display')
-    # camera_common.close_vimba()
-    camera_common.set_one_quarter("DEV_1AB22C02A23D")
