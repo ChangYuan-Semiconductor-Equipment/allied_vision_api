@@ -1,0 +1,25 @@
+[tool.poetry]
+name = "allied-vision-api"
+version = "0.1.0"
+description = "Allied vision 相机接口封装"
+authors = ["LiuWei <183074632@qq.com>"]
+readme = "README.md"
+packages = [{include = "allied_vision_api"},]
+
+
+[tool.poetry.dependencies]
+python = ">=3.8,<=3.13"
+pymba = "^0.3.7"
+opencv-python = "^4.10.0.84"
+socket-cyg = "^0.1.0"
+
+
+[[tool.poetry.source]]
+name = "tsinghua"
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+priority = "primary"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
