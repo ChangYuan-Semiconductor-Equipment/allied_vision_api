@@ -11,10 +11,10 @@ from allied_vision_api.camera_api import CameraApi
 class Controller:
     """Controller class."""
 
-    def __init__(self):
+    def __init__(self, socket_ip="127.0.0.1", socket_port=8000):
         self.camera_api = CameraApi()
         self._logger = self.camera_api.logger
-        self.socket_server = CygSocketServerAsyncio()
+        self.socket_server = CygSocketServerAsyncio(socket_ip, socket_port)
         self.start_server_thread()
 
     def start_server_thread(self):
@@ -36,7 +36,10 @@ class Controller:
         Returns:
             str: 回复信息.
         """
-        data_dict = json.loads(data.decode(encoding="utf-8"))
+        if isinstance(data, str):
+            data_dict = json.loads(data)
+        else:
+            data_dict = json.loads(data.decode(encoding="utf-8"))
         for command, info in data_dict.items():
             self._logger.info("%s 收到客户端指令: %s %s", "-" * 20, command, "-" * 20)
             self._logger.info("***指令包含的数据*** -> %s", info)

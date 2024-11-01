@@ -76,8 +76,9 @@ class CameraApi:
         Args:
             camera_id: 相机id.
         """
+        camera_id = self.get_camera_id_with_name(camera_id)
         self.open_vimba()
-        if not self.cameras_instance[camera_id]["is_open"]:
+        if not self.get_camera_open_state(camera_id):
             self.get_camera_instance(camera_id).open()
             self.cameras_instance[camera_id]["is_open"] = True
             self.logger.info("*** 相机已打开 ***")
@@ -88,7 +89,8 @@ class CameraApi:
         Args:
             camera_id: 相机id.
         """
-        if self.cameras_instance[camera_id]["is_open"]:
+        camera_id = self.get_camera_id_with_name(camera_id)
+        if self.get_camera_open_state(camera_id):
             self.get_camera_instance(camera_id).close()
             self.cameras_instance[camera_id]["is_open"] = False
             self.logger.info("*** 相机已关闭 ***")
@@ -101,8 +103,9 @@ class CameraApi:
             mode: 引擎模式, 默认是 SINGLE_FRAME 模式.
             call_back: 每个帧准备就绪时调用的函数引用
         """
+        camera_id = self.get_camera_id_with_name(camera_id)
         self.open_camera(camera_id)
-        if not self.cameras_instance[camera_id]["is_arm"]:
+        if not self.get_camera_arm_state(camera_id):
             self.get_camera_instance(camera_id).arm(mode, callback=call_back)
             self.cameras_instance[camera_id]["is_arm"] = True
             self.logger.info("*** 相机捕捉引擎已打开 ***")
@@ -113,10 +116,35 @@ class CameraApi:
         Args:
             camera_id: 相机id.
         """
+        camera_id = self.get_camera_id_with_name(camera_id)
         if self.get_camera_arm_state(camera_id):
             self.get_camera_instance(camera_id).disarm()
             self.cameras_instance[camera_id]["is_arm"] = False
             self.logger.info("*** 相机捕捉引擎已关闭 ***")
+
+    def get_camera_ids(self) -> list:
+        """获取所有相机的id.
+
+        Returns:
+            list: 所有已连接的相机列表
+        """
+        return list(self.cameras_instance.keys())
+
+    def get_camera_map(self) -> dict:
+        """获取相机名称和id的对应关系.
+
+        returns:
+            dict: 返回相机的当前对应关系.
+        """
+        return {camera_id: camera_info["name"] for camera_id, camera_info in self.cameras_instance.items()}
+
+    def get_camera_name(self, camera_mark: str) -> str:
+        """获取相机的名称.
+
+        Returns:
+            str: 相机对应的名称.
+        """
+        return self.get_camera_map()[camera_mark] if camera_mark in self.get_camera_map() else camera_mark
 
     def get_camera_arm_state(self, camera_id=None) -> bool:
         """获取相机的arm状态.
@@ -127,7 +155,7 @@ class CameraApi:
         Returns:
             bool: True -> 已打开, False -> 已关闭.
         """
-        return self.cameras_instance[camera_id]["is_arm"]
+        return self.cameras_instance[self.get_camera_id_with_name(camera_id)]["is_arm"]
 
     def get_camera_open_state(self, camera_id=None) -> bool:
         """获取相机的打开状态.
@@ -138,7 +166,21 @@ class CameraApi:
         Returns:
             bool: True -> 已打开, False -> 已关闭.
         """
-        return self.cameras_instance[camera_id]["is_open"]
+        return self.cameras_instance[self.get_camera_id_with_name(camera_id)]["is_open"]
+
+    def get_camera_id_with_name(self, camera_name: str) -> Optional[str]:
+        """根据相机名称获取相机id.
+
+        Returns:
+            Optional[str]: 返回相机id或None.
+        """
+        if camera_name in self.cameras_instance:
+            return camera_name
+        for _camera_id, camera_info in self.cameras_instance.items():
+            if camera_name == camera_info["name"]:
+                return _camera_id
+        return None
+
 
     def get_camera_instance(self, camera_id=None) -> Optional[Camera]:
         """根据相机id获取相机的实例对象.
@@ -150,7 +192,7 @@ class CameraApi:
             Optional[Camera]: 返回相机实例或者None.
         """
         if camera_id:
-            return self.cameras_instance[camera_id]["instance"]
+            return self.cameras_instance[self.get_camera_id_with_name(camera_id)]["instance"]
         return None
 
     def get_all_camera_instance(self) -> dict:
@@ -162,7 +204,8 @@ class CameraApi:
                 camera_id: {
                     "instance": self.vimba.camera(camera_id),
                     "is_open": False,
-                    "is_arm": False
+                    "is_arm": False,
+                    "name": ""
                 }
             })
         return cameras_object
@@ -218,6 +261,7 @@ class CameraApi:
         Args:
             camera_id: 相机id.
         """
+
         self.set_feature_value(camera_id, CameraFeatureCommand.Width.value, 2664)
         self.set_feature_value(camera_id, CameraFeatureCommand.Height.value, 2304)
         self.set_feature_value(camera_id, CameraFeatureCommand.OffsetY.value, 1152)
@@ -246,6 +290,14 @@ class CameraApi:
         self.set_feature_value(camera_id, CameraFeatureCommand.Height.value, max_height)
         self.set_feature_value(camera_id, CameraFeatureCommand.OffsetY.value, 0)
         self.set_feature_value(camera_id, CameraFeatureCommand.OffsetX.value, 0)
+        self.set_feature_value(camera_id, CameraFeatureCommand.BinningHorizontal.value, 1)
+        self.set_feature_value(camera_id, CameraFeatureCommand.BinningVertical.value, 1)
+
+    def set_camera_map(self, camera_map: dict):
+        """设置每个相机的名称, 和相机id一一对应."""
+        for camera_id, camera_name, in camera_map.items():
+            if camera_id in self.cameras_instance:
+                self.cameras_instance[camera_id]["name"] = camera_name
 
     def acquire_one(self, camera_id=None, project_name="", camera_close=False, vimba_close=False, save_dir=None):
         """采集一张照片, 前提是打开vimba驱动, 打开相机, 打开相机engineer (arm).
@@ -315,16 +367,18 @@ class CameraApi:
             camera_id: 相机id.
             save_dir: 指定图片保存目录.
         """
+        camera_name = self.get_camera_name(camera_id)
         exposure_time = f"{int(self.get_feature_value(camera_id, CameraFeatureCommand.ExposureTime.value)):08}"
         def _save_photo_local():
             _frame_id = f"{frame.data.frameID:04}"
-            _image = frame.buffer_data_numpy()
+            _timestamp = frame.data.timestamp
+            _file_name = f"{project_name}.{camera_name}.{exposure_time}.{_timestamp}.{_frame_id}.png"
             if save_dir:
                 os.makedirs(save_dir, exist_ok=True)
-                file_path = os.path.join(save_dir, f"{project_name}.{camera_id}.{exposure_time}.{_frame_id}.png")
+                file_path = os.path.join(save_dir, _file_name)
             else:
-                file_path = f"{project_name}.{camera_id}.{exposure_time}.{_frame_id}.png"
-            cv2.imwrite(file_path, _image)  # pylint: disable=E1101
+                file_path = _file_name
+            cv2.imwrite(file_path, frame.buffer_data_numpy())  # pylint: disable=E1101
         threading.Thread(target=_save_photo_local, daemon=False).start()
 
     def generate_save_photo_func(self, camera_id, project_name: str, interval: int, save_dir=None) -> Callable:
