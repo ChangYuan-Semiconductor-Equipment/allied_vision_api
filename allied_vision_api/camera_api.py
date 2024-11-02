@@ -99,6 +99,29 @@ class CameraApi:
         """
         return self._cameras_instance
 
+    @staticmethod
+    def get_expect_timestamp(timestamp: Union[str, int, float]) -> str:
+        """根据传进来的时间戳得到处理后的时间戳字符串.
+
+        Args:
+            timestamp: 传进来的时间戳.
+
+        Returns:
+            str: 期待的时间戳.
+        """
+        integer_decimal_list = str(timestamp).split(".")
+        if len(integer_decimal_list) == 1:
+            return f"{integer_decimal_list[0]:>08}.{'0' * 8}"
+        return f"{integer_decimal_list[0]:>08}.{integer_decimal_list[1]:>08}"
+
+    def _get_all_camera_instance(self) -> Dict[str, CameraDevice]:
+        """获取所有的相机对象."""
+        self.open_vimba()
+        cameras_object = {}
+        for camera_id in self._vimba.camera_ids():
+            cameras_object.update({camera_id: CameraDevice(self._vimba, camera_id)})
+        return cameras_object
+
     def _set_log(self):
         """设置日志."""
         self.file_handler.setFormatter(logging.Formatter(self.LOG_FORMAT))
@@ -120,13 +143,6 @@ class CameraApi:
             self._is_vimba_open = True
             self._logger.info("*** vimba 驱动已打开 ***")
 
-    def close_vimba(self) -> None:
-        """相机操作结束后需要关闭vimba"""
-        if self._is_vimba_open:
-            self._vimba.shutdown()
-            self._is_vimba_open = False
-            self._logger.info("*** vimba 驱动已关闭 ***")
-
     def open_camera(self, id_or_name: str):
         """打开指定相机.
 
@@ -139,6 +155,13 @@ class CameraApi:
             self.get_camera_instance(camera_id).open()
             self.cameras_instance[camera_id].is_open = True
             self._logger.info("*** 相机已打开 ***")
+
+    def close_vimba(self) -> None:
+        """相机操作结束后需要关闭vimba"""
+        if self._is_vimba_open:
+            self._vimba.shutdown()
+            self._is_vimba_open = False
+            self._logger.info("*** vimba 驱动已关闭 ***")
 
     def close_camera(self, id_or_name: str):
         """关闭相机.
@@ -242,7 +265,6 @@ class CameraApi:
                 return _camera_id
         return None
 
-
     def get_camera_instance(self, id_or_name: str) -> Optional[Camera]:
         """根据相机id获取相机的实例对象.
 
@@ -255,14 +277,6 @@ class CameraApi:
         if id_or_name:
             return self.cameras_instance[self.get_camera_id_with_name(id_or_name)].camera_instance
         return None
-
-    def _get_all_camera_instance(self) -> Dict[str, CameraDevice]:
-        """获取所有的相机对象."""
-        self.open_vimba()
-        cameras_object = {}
-        for camera_id in self._vimba.camera_ids():
-            cameras_object.update({camera_id: CameraDevice(self._vimba, camera_id)})
-        return cameras_object
 
     def get_feature_value(self, camera_id, feature_name: str) -> Union[str, int, float]:
         """获取当前参数, 前提是相机已打开, 相机已打开代表程序连接了相机而不是相机处于捕捉数据状态.
@@ -417,23 +431,7 @@ class CameraApi:
         if vimba_close:
             self.close_vimba()
 
-    @staticmethod
-    def get_expect_timestamp(timestamp: Union[str, int, float]) -> str:
-        """根据传进来的时间戳得到处理后的时间戳字符串.
-
-        Args:
-            timestamp: 传进来的时间戳.
-
-        Returns:
-            str: 期待的时间戳.
-        """
-        integer_decimal_list = str(timestamp).split(".")
-        if len(integer_decimal_list) == 1:
-            return f"{integer_decimal_list[0]:>08}.{'0' * 8}"
-        return f"{integer_decimal_list[0]:>08}.{integer_decimal_list[1]:>08}"
-
-
-    def acquire_continue(self, id_or_name: str,  project_name="", timestamp="", acquire_one=False, interval=100,
+    def acquire_continue(self, id_or_name: str, project_name="", timestamp="", acquire_one=False, interval=100,
                          continue_time=5, camera_close=False, vimba_close=False, save_dir=None):
         """指定间隔时间, 连续采集图片.
 
@@ -485,6 +483,7 @@ class CameraApi:
         """
         camera_name = self.get_camera_name(id_or_name)
         exposure_time = f"{int(self.get_feature_value(id_or_name, CameraFeatureCommand.ExposureTime.value)):>08}"
+
         def _save_photo_local():
             _frame_id = f"{frame.data.frameID:>04}"
             _file_name = f"{project_name}.{camera_name}.{exposure_time}.{timestamp}.{_frame_id}.png"
@@ -494,6 +493,7 @@ class CameraApi:
             else:
                 file_path = _file_name
             cv2.imwrite(file_path, frame.buffer_data_numpy())  # pylint: disable=E1101
+
         threading.Thread(target=_save_photo_local, daemon=False).start()
 
     def generate_save_photo_func(
