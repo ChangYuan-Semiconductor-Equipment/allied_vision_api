@@ -15,7 +15,7 @@ from pymba.camera import Camera, SINGLE_FRAME, CONTINUOUS
 
 from allied_vision_api.camera_device import CameraDevice
 from allied_vision_api.camera_feature_command import CameraFeatureCommand
-from allied_vision_api.exception import CameraFeatureSetError
+from allied_vision_api.exception import CameraFeatureSetError, CameraFindError
 
 
 # pylint: disable=C0301, disable=R0917, disable=R0913, disable=R0904
@@ -252,18 +252,24 @@ class CameraApi:
         """
         return self.cameras_instance[self.get_camera_id_with_name(id_or_name)].is_open
 
-    def get_camera_id_with_name(self, camera_name: str) -> Optional[str]:
+    def get_camera_id_with_name(self, id_or_name: str) -> str:
         """根据相机名称获取相机id.
 
+        Args:
+            id_or_name: 相机id或name.
+
         Returns:
-            Optional[str]: 返回相机id或None.
+            str: 返回相机id.
+
+        Raises:
+            CameraFindError: 抛出未发现相机异常.
         """
-        if camera_name in self.cameras_instance:
-            return camera_name
-        for _camera_id, camera_instance in self.cameras_instance.items():
-            if camera_name == camera_instance.camera_name:
-                return _camera_id
-        return None
+        if id_or_name in self.cameras_instance:
+            return id_or_name
+        for camera_id, camera_instance in self.cameras_instance.items():
+            if id_or_name == camera_instance.camera_name:
+                return camera_id
+        raise CameraFindError(f"未在此PC上发现 {id_or_name} 相机!")
 
     def get_camera_instance(self, id_or_name: str) -> Optional[Camera]:
         """根据相机id获取相机的实例对象.
@@ -278,32 +284,32 @@ class CameraApi:
             return self.cameras_instance[self.get_camera_id_with_name(id_or_name)].camera_instance
         return None
 
-    def get_feature_value(self, camera_id, feature_name: str) -> Union[str, int, float]:
+    def get_feature_value(self, id_or_name, feature_name: str) -> Union[str, int, float]:
         """获取当前参数, 前提是相机已打开, 相机已打开代表程序连接了相机而不是相机处于捕捉数据状态.
 
         Args:
-            camera_id: 相机id.
+            id_or_name: 相机id或name.
             feature_name: 参数选项的名称.
 
         Returns:
             Union[tuple, list]: 返回参数可选值的范围.
         """
-        feature_instance = self.get_camera_instance(camera_id).feature(feature_name)
-        self.open_camera(camera_id)
+        feature_instance = self.get_camera_instance(id_or_name).feature(feature_name)
+        self.open_camera(id_or_name)
         return feature_instance.value
 
-    def get_feature_range(self, camera_id, feature_name: str) -> Union[tuple, list]:
+    def get_feature_range(self, id_or_name, feature_name: str) -> Union[tuple, list]:
         """获取参数值的范围.
 
         Args:
-            camera_id: 相机id.
+            id_or_name: 相机id或name.
             feature_name: 参数选项的名称.
 
         Returns:
             Union[tuple, list]: 返回参数可选值的范围.
         """
-        feature_instance = self.get_camera_instance(camera_id).feature(feature_name)
-        self.open_camera(camera_id)
+        feature_instance = self.get_camera_instance(id_or_name).feature(feature_name)
+        self.open_camera(id_or_name)
         return feature_instance.range
 
     def set_feature_value(self, id_or_name: str, feature_name: str = None, value: Union[int, float, str] = None):
@@ -456,8 +462,9 @@ class CameraApi:
         self.open_vimba()
         self.open_camera(id_or_name)
         self.arm_camera(
-            id_or_name, CONTINUOUS, self.generate_save_photo_func(
-                id_or_name, project_name, timestamp, interval, save_dir
+            id_or_name, CONTINUOUS,
+            self.generate_save_photo_func(
+                self.get_camera_name(id_or_name), project_name, timestamp, interval, save_dir
             )
         )
         camera_instance = self.get_camera_instance(id_or_name)
@@ -497,12 +504,12 @@ class CameraApi:
         threading.Thread(target=_save_photo_local, daemon=False).start()
 
     def generate_save_photo_func(
-            self, camera_id, project_name: str, timestamp: str, interval: int, save_dir=None
+            self, camera_name: str, project_name: str, timestamp: str, interval: int, save_dir=None
     ) -> Callable:
         """生成保存图片的函数.
 
         Args:
-            camera_id: 相机id.
+            camera_name: 相机name.
             project_name: 项目名称.
             timestamp: 传进来的时间戳.
             interval: 间隔时间.
@@ -511,7 +518,7 @@ class CameraApi:
         Returns:
             Callable: 保存图片的函数.
         """
-        exposure_time = f"{int(self.get_feature_value(camera_id, CameraFeatureCommand.ExposureTime.value)):>08}"
+        exposure_time = f"{int(self.get_feature_value(camera_name, CameraFeatureCommand.ExposureTime.value)):>08}"
 
         def _save_photo_handler(_frame):
             """保存图片.
@@ -520,14 +527,15 @@ class CameraApi:
                 _frame: 捕捉到的帧数据.
             """
             _frame_id = f"{_frame.data.frameID:>04}"
+            _photo_name = f"{project_name}.{camera_name}.{exposure_time}.{timestamp}.{_frame_id}.png"
 
             def _save_photo():
                 _image = _frame.buffer_data_numpy()
                 if save_dir:
                     os.makedirs(save_dir, exist_ok=True)
-                    file_path = os.path.join(save_dir, f"{project_name}.{camera_id}.{exposure_time}.{_frame_id}.png")
+                    file_path = os.path.join(save_dir, _photo_name)
                 else:
-                    file_path = f"{project_name}.{camera_id}.{timestamp}.{exposure_time}.{_frame_id}.png"
+                    file_path = _photo_name
                 cv2.imwrite(file_path, _image)  # pylint: disable=E1101
 
             cv2.waitKey(interval)  # pylint: disable=E1101
