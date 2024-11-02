@@ -238,7 +238,7 @@ class CameraApi:
         if camera_name in self.cameras_instance:
             return camera_name
         for _camera_id, camera_instance in self.cameras_instance.items():
-            if camera_name == camera_instance.name:
+            if camera_name == camera_instance.camera_name:
                 return _camera_id
         return None
 
