@@ -13,7 +13,7 @@ class Controller:
 
     def __init__(self, socket_ip="127.0.0.1", socket_port=8000):
         self.camera_api = CameraApi()
-        self._logger = self.camera_api.logger
+        self._logger = self.camera_api._logger
         self.socket_server = CygSocketServerAsyncio(socket_ip, socket_port)
         self.start_server_thread()
 
