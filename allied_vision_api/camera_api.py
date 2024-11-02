@@ -430,8 +430,7 @@ class CameraApi:
         integer_decimal_list = str(timestamp).split(".")
         if len(integer_decimal_list) == 1:
             return f"{integer_decimal_list[0]:>08}.{'0' * 8}"
-        else:
-            return f"{integer_decimal_list[0]:>08}.{integer_decimal_list[1]:>08}"
+        return f"{integer_decimal_list[0]:>08}.{integer_decimal_list[1]:>08}"
 
 
     def acquire_continue(self, id_or_name: str,  project_name="", timestamp="", acquire_one=False, interval=100,
@@ -487,7 +486,7 @@ class CameraApi:
         camera_name = self.get_camera_name(id_or_name)
         exposure_time = f"{int(self.get_feature_value(id_or_name, CameraFeatureCommand.ExposureTime.value)):>08}"
         def _save_photo_local():
-            _frame_id = f"{frame.data.frameID:04}"
+            _frame_id = f"{frame.data.frameID:>04}"
             _file_name = f"{project_name}.{camera_name}.{exposure_time}.{timestamp}.{_frame_id}.png"
             if save_dir:
                 os.makedirs(save_dir, exist_ok=True)
@@ -520,7 +519,7 @@ class CameraApi:
             Args:
                 _frame: 捕捉到的帧数据.
             """
-            _frame_id = f"{_frame.data.frameID:04}"
+            _frame_id = f"{_frame.data.frameID:>04}"
 
             def _save_photo():
                 _image = _frame.buffer_data_numpy()
