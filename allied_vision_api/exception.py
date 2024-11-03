@@ -17,5 +17,9 @@ class CameraFeatureSetError(CameraBaseException):
     """Camera 设置参数值时出现异常."""
 
 
-class CameraRunTimeError(CameraBaseException):
-    """Camera 运行时异常."""
+class CameraVideoOpenError(CameraBaseException):
+    """打开相机保存的视频异常."""
+
+
+class CameraPhotoOpenError(CameraBaseException):
+    """打开相机保存的图片异常."""
