@@ -21,7 +21,7 @@ from allied_vision_api.exception import CameraFeatureSetError, CameraFindError, 
     CameraPhotoOpenError
 
 
-# pylint: disable=C0301, disable=R0917, disable=R0913, disable=R0904
+# pylint: disable=C0301, disable=R0917, disable=R0913, disable=R0904, disable=E1101
 class CameraApi:
     """Allied vision api.
 
