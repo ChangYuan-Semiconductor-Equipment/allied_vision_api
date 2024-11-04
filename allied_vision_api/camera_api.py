@@ -205,7 +205,7 @@ class CameraApi:
 
     # 仅内部使用函数
     def _save_photo_local(self, camera_name: str, frame_data: ndarray, project_name: str,
-                          exposure_time: str, timestamp: str, frame_id: str, save_dir=None, *args):
+                          exposure_time: str, timestamp: str, frame_id: str, save_dir, *args):
         """将采集的图片保存在本地.
 
         Args:
@@ -228,7 +228,7 @@ class CameraApi:
             self._logger.info("*** 保存图片成功 *** -> %s", _file_path)
         threading.Thread(target=_save_photo_local_thread, daemon=False).start()
 
-    def _save_video(self, camera_name: str, args, project_name="", timestamp="", save_dir=None):
+    def _save_video(self, camera_name: str, args: tuple, project_name="", timestamp="", save_dir=None):
         """保存视频.
 
         Args:
@@ -237,8 +237,7 @@ class CameraApi:
             timestamp: 传进来的时间戳.
             save_dir: 指定图片保存目录.
         """
-        camera_id = self.get_camera_id_with_name(camera_name)
-        _queue_name = f"{camera_id}_video_frame_queue"
+        _queue_name = f"{self.get_camera_id_with_name(camera_name)}_video_frame_queue"
         if hasattr(self, _queue_name):
             _queue = getattr(self, _queue_name)
             _queue_size = _queue.qsize()
