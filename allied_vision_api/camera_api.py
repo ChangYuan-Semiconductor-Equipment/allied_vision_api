@@ -12,6 +12,7 @@ from queue import Queue
 from typing import Optional, Callable, Union, Dict
 
 import cv2
+from numpy import ndarray
 from pymba import Vimba, VimbaException, Frame
 from pymba.camera import Camera, SINGLE_FRAME, CONTINUOUS
 
@@ -117,6 +118,8 @@ class CameraApi:
             return f"{integer_decimal_list[0]:>08}.{'0' * 8}"
         return f"{integer_decimal_list[0]:>08}.{integer_decimal_list[1]:>08}"
 
+    # ----显示函数----
+
     @staticmethod
     def show_photo(photo_path: str, width: int = 640, height: int = 480):
         """显示视频.
@@ -170,33 +173,62 @@ class CameraApi:
         cap.release()
         cv2.destroyAllWindows()
 
+    # ----显示函数----
+
+    @staticmethod
+    def get_file_path(file_name: str, save_dir: Optional[str] = "") -> str:
+        """获取保存文件的路径.
+
+        Args:
+            file_name: 文件名称.
+            save_dir: 保存文件的目录, 默认空字符串.
+        """
+        if save_dir:
+            os.makedirs(save_dir, exist_ok=True)
+            return os.path.join(save_dir, file_name)
+        return file_name
+
+    @staticmethod
+    def _perfect_file_name(file_name, args: tuple) -> str:
+        """完善要保存的文件名.
+
+        Args:
+            file_name: 文件名称.
+            args: 要追加的文件名称参数.
+
+        Returns:
+            str: 完善后的文件名称.
+        """
+        if args:
+            return f"{file_name}.{'.'.join(args)}"
+        return file_name
+
     # 仅内部使用函数
-    def _save_photo_local(self, frame, project_name: str, timestamp: str, id_or_name: str, save_dir=None):
+    def _save_photo_local(self, camera_name: str, frame_data: ndarray, project_name: str,
+                          exposure_time: str, timestamp: str, frame_id: str, save_dir=None, *args):
         """将采集的图片保存在本地.
 
         Args:
-            frame: 采集到的图像帧数据.
+            camera_name: 相机id或name.
+            frame_data: 采集到的图像帧数据, 已转化成ndarray.
             project_name: 项目名称, example: seethru or display.
+            exposure_time: 格式化后的曝光.
             timestamp: 传进来的时间戳.
-            id_or_name: 相机id或name.
+            frame_id: frame_id.
             save_dir: 指定图片保存目录.
+            args: 图片名称要包含的未定义参数.
         """
-        camera_name = self.get_camera_name(id_or_name)
-        exposure_time = self.get_exposure_time(id_or_name)
+        _file_name = f"{project_name}.{camera_name}.{exposure_time}.{timestamp}.{frame_id}"
+        _file_name = self._perfect_file_name(_file_name, args)
+        _file_path = self.get_file_path(f"{_file_name}.png", save_dir)
 
-        def _save_photo_local():
-            _frame_id = f"{frame.data.frameID:>04}"
-            _file_name = f"{project_name}.{camera_name}.{exposure_time}.{timestamp}.{_frame_id}.png"
-            if save_dir:
-                os.makedirs(save_dir, exist_ok=True)
-                file_path = os.path.join(save_dir, _file_name)
-            else:
-                file_path = _file_name
-            cv2.imwrite(file_path, frame.buffer_data_numpy())  # pylint: disable=E1101
+        def _save_photo_local_thread():
+            self._logger.info("*** 开始保存图片 *** -> %s", _file_path)
+            cv2.imwrite(_file_path, frame_data)  # pylint: disable=E1101
+            self._logger.info("*** 保存图片成功 *** -> %s", _file_path)
+        threading.Thread(target=_save_photo_local_thread, daemon=False).start()
 
-        threading.Thread(target=_save_photo_local, daemon=False).start()
-
-    def _save_video(self, camera_name: str, project_name="", timestamp="", save_dir=None):
+    def _save_video(self, camera_name: str, args, project_name="", timestamp="", save_dir=None):
         """保存视频.
 
         Args:
@@ -214,11 +246,9 @@ class CameraApi:
             if _queue_size != 0:
                 self._logger.info("*** 准备创建视频文件, 写入帧数据 *** -> 将要写 %s 帧数据", _queue_size)
 
-                video_name = f"{project_name}.{camera_name}.{self.get_exposure_time(camera_name)}.{timestamp}.avi"
-                video_path = video_name
-                if save_dir:
-                    os.makedirs(save_dir, exist_ok=True)
-                    video_path = os.path.join(save_dir, video_name)
+                video_name = f"{project_name}.{camera_name}.{self.get_exposure_time(camera_name)}.{timestamp}"
+                video_name = f"{self._perfect_file_name(video_name, args)}.avi"
+                video_path = self.get_file_path(video_name, save_dir)
 
                 # noinspection PyUnresolvedReferences
                 fourcc = cv2.VideoWriter_fourcc(*'XVID')
@@ -265,42 +295,30 @@ class CameraApi:
                 setattr(self, f"{camera_id}_video_frame_queue", _video_frame_queue)
         return _save_acquire_continue_frame
 
-    def _generate_save_photo_func(
-            self, camera_name: str, project_name: str, timestamp: str, interval: int, save_dir=None
-    ) -> Callable:
+    def _generate_save_photo_func(self, photo_name: str, save_dir: str) -> Callable:
         """生成保存图片的函数.
 
         Args:
-            camera_name: 相机name.
-            project_name: 项目名称.
-            timestamp: 传进来的时间戳.
-            interval: 间隔时间.
-            save_dir: 指定图片保存目录.
+            photo_name: 图片名称.
+            save_dir: 保存路径.
 
         Returns:
             Callable: 保存图片的函数.
         """
-        exposure_time = f"{int(self.get_feature_value(camera_name, CameraFeatureCommand.ExposureTime.value)):>08}"
-
         def _save_photo_handler(_frame):
             """保存图片.
 
             Args:
                 _frame: 捕捉到的帧数据.
             """
-            _frame_id = f"{_frame.data.frameID:>04}"
-            _photo_name = f"{project_name}.{camera_name}.{exposure_time}.{timestamp}.{_frame_id}.png"
-
+            _photo_path = f"{photo_name}.{_frame.data.frameID}.png"
+            _photo_path = self.get_file_path(_photo_path, save_dir)
             def _save_photo():
                 _image = _frame.buffer_data_numpy()
-                if save_dir:
-                    os.makedirs(save_dir, exist_ok=True)
-                    file_path = os.path.join(save_dir, _photo_name)
-                else:
-                    file_path = _photo_name
-                cv2.imwrite(file_path, _image)  # pylint: disable=E1101
+                self._logger.info("*** 开始保存图片 *** -> %s", _photo_path)
+                cv2.imwrite(_photo_path, _image)  # pylint: disable=E1101
+                self._logger.info("*** 保存图片成功 *** -> %s", _photo_path)
 
-            cv2.waitKey(interval)  # pylint: disable=E1101
             threading.Thread(target=_save_photo, daemon=False).start()
 
         return _save_photo_handler
@@ -648,7 +666,7 @@ class CameraApi:
                 self.cameras_instance[camera_id].camera_name = camera_name
 
     # 采集数据函数
-    def acquire_one(self, id_or_name: str, project_name: str = "", timestamp: Union[int, float, str] = "",
+    def acquire_one(self, id_or_name: str, *args, project_name: str = "", timestamp: Union[int, float, str] = "", frame_id: str = "",
                     camera_close: bool = False, vimba_close: bool = False, save_dir: str = None):
         """采集一张照片, 前提是打开vimba驱动, 打开相机, 打开相机engineer (arm).
 
@@ -656,6 +674,7 @@ class CameraApi:
             id_or_name: 相机id或name.
             project_name: 所属项目.
             timestamp: 传进来的时间戳.
+            frame_id: 传进来的frame_id.
             camera_close: 是否关闭相机.
             vimba_close: 是否关闭vimba.
             save_dir: 指定图片保存目录.
@@ -664,28 +683,38 @@ class CameraApi:
         self.open_camera(id_or_name)
         self.arm_camera(id_or_name)
         camera_instance = self.get_camera_instance(id_or_name)
-        self._logger.info("*** 开始捕捉帧数据 ***")
-        frame = camera_instance.acquire_frame()
-        self._logger.info("*** 结束捕捉帧数据 ***")
 
-        self._save_photo_local(frame, project_name, self.get_expect_timestamp(timestamp), id_or_name, save_dir=save_dir)
+        frame = camera_instance.acquire_frame()
+
+        save_photo_local_args = (
+            self.get_camera_name(id_or_name),
+            frame.buffer_data_numpy(),
+            project_name,
+            self.get_exposure_time(id_or_name),
+            self.get_expect_timestamp(timestamp),
+            frame_id if frame_id else f"{str(frame.data.frameID):>04}",
+            save_dir,
+            *args
+        )
+        self._save_photo_local(*save_photo_local_args)
 
         if camera_close:
-            self.disarm_camera(id_or_name)
             self.close_camera(id_or_name)
         if vimba_close:
+            self.disarm_camera(id_or_name)
+            self.close_camera(id_or_name)
             self.close_vimba()
 
-    def acquire_continue(self, id_or_name: str, project_name="", timestamp="", acquire_one=False, interval=100,
-                         continue_time=5, camera_close=False, vimba_close=False, save_dir=None):
+    def acquire_continue(self, id_or_name: str, *args, project_name="", timestamp="", frame_id="",
+                         acquire_one=False, continue_time=5, camera_close=False, vimba_close=False, save_dir=None):
         """指定间隔时间, 连续采集图片.
 
         Args:
             id_or_name: 相机id或name.
             project_name: 项目名称.
             timestamp: 传进来的时间戳.
+            frame_id: frame_id.
             acquire_one: 是否只拍一个照片.
-            interval: 间隔时间, 单位是毫秒.
             continue_time: 持续时间, 单位是秒.
             camera_close: 是否关闭相机.
             vimba_close: 是否关闭vimba.
@@ -693,19 +722,19 @@ class CameraApi:
         """
         timestamp = self.get_expect_timestamp(timestamp)
         if acquire_one:
-            self.acquire_one(
-                id_or_name, project_name, timestamp,
-                camera_close=camera_close, vimba_close=vimba_close, save_dir=save_dir
-            )
+            self.acquire_one(id_or_name, args, project_name, timestamp, frame_id,
+                             camera_close=camera_close, vimba_close=vimba_close, save_dir=save_dir)
             return
         self.open_vimba()
         self.open_camera(id_or_name)
-        self.arm_camera(
-            id_or_name, CONTINUOUS,
-            self._generate_save_photo_func(
-                self.get_camera_name(id_or_name), project_name, timestamp, interval, save_dir
-            )
-        )
+
+        camera_name = self.get_camera_name(id_or_name)
+        exposure_time = self.get_exposure_time(id_or_name)
+        photo_name = f"{camera_name}.{project_name}.{exposure_time}.{timestamp}.{frame_id}"
+
+        photo_name = self._perfect_file_name(photo_name, args)
+
+        self.arm_camera( id_or_name, CONTINUOUS, self._generate_save_photo_func(photo_name, save_dir))
         camera_instance = self.get_camera_instance(id_or_name)
         camera_instance.start_frame_acquisition()
         time.sleep(continue_time)
@@ -715,9 +744,11 @@ class CameraApi:
             self.disarm_camera(id_or_name)
             self.close_camera(id_or_name)
         if vimba_close:
+            self.disarm_camera(id_or_name)
+            self.close_camera(id_or_name)
             self.close_vimba()
 
-    def acquire_video(self, id_or_name: str, project_name="", timestamp="", continue_time=5,
+    def acquire_video(self, id_or_name: str, *args, project_name="", timestamp="", continue_time=5,
                       camera_close=False, vimba_close=False, save_dir=None):
         """指定相机持续 continue_time 秒采集视频, 进行保存.
 
@@ -734,19 +765,25 @@ class CameraApi:
         self.open_vimba()
         self.open_camera(id_or_name)
         call_back = self._generate_save_video_queue(self.get_camera_id_with_name(id_or_name))
+
         self.arm_camera(id_or_name, CONTINUOUS, call_back)
         camera_instance = self.get_camera_instance(id_or_name)
         camera_instance.start_frame_acquisition()
         self._logger.info("*** 相机开始捕捉数据 ***")
 
-        time.sleep(continue_time)
+        while continue_time:
+            self._logger.info("*** 持续捕捉中 *** -> 还要持续 %s 秒", continue_time)
+            time.sleep(1)
+            continue_time -= 1
+
         camera_instance.stop_frame_acquisition()  # 停止采集
         self._logger.info("*** 相机停止捕捉数据 ***")
 
-        self._save_video(self.get_camera_name(id_or_name), project_name, timestamp, save_dir)  # 将视频保存
+        self._save_video(self.get_camera_name(id_or_name), args, project_name, timestamp, save_dir)  # 将视频保存
 
         if camera_close:
-            self.disarm_camera(id_or_name)
             self.close_camera(id_or_name)
         if vimba_close:
+            self.disarm_camera(id_or_name)
+            self.close_camera(id_or_name)
             self.close_vimba()
